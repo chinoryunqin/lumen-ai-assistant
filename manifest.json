@@ -1,0 +1,10 @@
+{
+  "id": "lumen-ai-assistant",
+  "name": "Lumen",
+  "version": "1.0.0",
+  "minAppVersion": "1.4.0",
+  "description": "为 Obsidian 笔记点亮 AI 之光。支持 Claude、GPT、MiniMax、Kimi，提供总结、翻译、深度剖析、提取待办、续写、润色等快捷操作，并可直接将结果写回笔记。",
+  "author": "rick",
+  "authorUrl": "",
+  "isDesktopOnly": false
+}

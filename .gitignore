@@ -1,0 +1,12 @@
+# build / deps
+node_modules/
+main.js
+main.js.map
+
+# editor
+.DS_Store
+*.swp
+.vscode/
+
+# obsidian data when developing in a vault
+data.json
