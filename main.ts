@@ -10,6 +10,7 @@ import {
   Setting,
   TFile,
   WorkspaceLeaf,
+  requestUrl,
 } from "obsidian";
 
 const VIEW_TYPE = "lumen-ai-assistant";
@@ -36,6 +37,17 @@ interface Message {
 
 // ── API calls ────────────────────────────────────────────────────────────────
 
+interface OpenAIShape {
+  choices: Array<{ message: { content: string } }>;
+}
+interface AnthropicShape {
+  content: Array<{ text: string }>;
+}
+interface ErrorShape {
+  error?: { message?: string };
+  base_resp?: { status_msg?: string };
+}
+
 async function callAI(
   settings: AIAssistantSettings,
   messages: Message[],
@@ -46,10 +58,11 @@ async function callAI(
     : settings.systemPrompt;
 
   if (settings.apiProvider === "anthropic") {
-    const res = await fetch("https://api.anthropic.com/v1/messages", {
+    const res = await requestUrl({
+      url: "https://api.anthropic.com/v1/messages",
       method: "POST",
+      contentType: "application/json",
       headers: {
-        "Content-Type": "application/json",
         "x-api-key": settings.apiKey,
         "anthropic-version": "2023-06-01",
       },
@@ -59,68 +72,43 @@ async function callAI(
         system: systemWithContext,
         messages,
       }),
+      throw: false,
     });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error((err as { error?: { message?: string } }).error?.message || `HTTP ${res.status}`);
+    if (res.status < 200 || res.status >= 300) {
+      const err = res.json as ErrorShape;
+      throw new Error(err?.error?.message || `HTTP ${res.status}`);
     }
-    const data = await res.json() as { content: Array<{ text: string }> };
+    const data = res.json as AnthropicShape;
     return data.content[0].text;
-  } else if (settings.apiProvider === "kimi") {
-    const res = await fetch("https://api.moonshot.cn/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${settings.apiKey}`,
-      },
-      body: JSON.stringify({
-        model: settings.model,
-        messages: [{ role: "system", content: systemWithContext }, ...messages],
-      }),
-    });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error((err as { error?: { message?: string } }).error?.message || `HTTP ${res.status}`);
-    }
-    const data = await res.json() as { choices: Array<{ message: { content: string } }> };
-    return data.choices[0].message.content;
-  } else if (settings.apiProvider === "minimax") {
-    const res = await fetch("https://api.minimax.chat/v1/text/chatcompletion_v2", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${settings.apiKey}`,
-      },
-      body: JSON.stringify({
-        model: settings.model,
-        messages: [{ role: "system", content: systemWithContext }, ...messages],
-      }),
-    });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error((err as { base_resp?: { status_msg?: string } }).base_resp?.status_msg || `HTTP ${res.status}`);
-    }
-    const data = await res.json() as { choices: Array<{ message: { content: string } }> };
-    return data.choices[0].message.content;
-  } else {
-    const res = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${settings.apiKey}`,
-      },
-      body: JSON.stringify({
-        model: settings.model,
-        messages: [{ role: "system", content: systemWithContext }, ...messages],
-      }),
-    });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error((err as { error?: { message?: string } }).error?.message || `HTTP ${res.status}`);
-    }
-    const data = await res.json() as { choices: Array<{ message: { content: string } }> };
-    return data.choices[0].message.content;
   }
+
+  // OpenAI-compatible chat completions endpoint (used by OpenAI, MiniMax, Kimi)
+  const endpoints: Record<string, string> = {
+    openai: "https://api.openai.com/v1/chat/completions",
+    minimax: "https://api.minimax.chat/v1/text/chatcompletion_v2",
+    kimi: "https://api.moonshot.cn/v1/chat/completions",
+  };
+
+  const res = await requestUrl({
+    url: endpoints[settings.apiProvider],
+    method: "POST",
+    contentType: "application/json",
+    headers: { Authorization: `Bearer ${settings.apiKey}` },
+    body: JSON.stringify({
+      model: settings.model,
+      messages: [{ role: "system", content: systemWithContext }, ...messages],
+    }),
+    throw: false,
+  });
+
+  if (res.status < 200 || res.status >= 300) {
+    const err = res.json as ErrorShape;
+    throw new Error(
+      err?.error?.message || err?.base_resp?.status_msg || `HTTP ${res.status}`
+    );
+  }
+  const data = res.json as OpenAIShape;
+  return data.choices[0].message.content;
 }
 
 // ── Quick actions ────────────────────────────────────────────────────────────
@@ -247,7 +235,7 @@ class AIAssistantView extends ItemView {
     // If focus is inside our own panel (e.g. the user clicked the input box),
     // keep the last known selection — clicking elsewhere clears the editor's
     // selection, which would wipe our context label otherwise.
-    if (this.containerEl.contains(document.activeElement)) return;
+    if (this.containerEl.contains(activeDocument.activeElement)) return;
 
     const sel = view.editor.getSelection().trim();
     if (sel === this.selectedText) return;
@@ -338,15 +326,15 @@ class AIAssistantView extends ItemView {
     this.inputEl.addEventListener("keydown", (e) => {
       if (e.key === "Enter" && !e.shiftKey) {
         e.preventDefault();
-        this.sendMessage(this.inputEl.value);
+        void this.sendMessage(this.inputEl.value);
       }
     });
 
     this.sendBtn = inputBox.createEl("button", { cls: "ai-send-btn" });
     this.sendBtn.createSpan({ text: "➤" });
-    this.sendBtn.addEventListener("click", () =>
-      this.sendMessage(this.inputEl.value)
-    );
+    this.sendBtn.addEventListener("click", () => {
+      void this.sendMessage(this.inputEl.value);
+    });
     this.updateSendBtn();
 
     // Bottom hints
@@ -387,7 +375,7 @@ class AIAssistantView extends ItemView {
       const text = btn.createDiv({ cls: "ai-quick-text" });
       text.createDiv({ cls: "ai-quick-label", text: a.label });
       text.createDiv({ cls: "ai-quick-sub", text: a.sublabel });
-      btn.addEventListener("click", () => this.sendMessage(a.prompt));
+      btn.addEventListener("click", () => { void this.sendMessage(a.prompt); });
     }
 
     // Suggestion (only when there's a note)
@@ -406,9 +394,9 @@ class AIAssistantView extends ItemView {
         cls: "ai-suggestion-btn",
         text: "提取待办 →",
       });
-      sugBtn.addEventListener("click", () =>
-        this.sendMessage(QUICK_ACTIONS[3].prompt)
-      );
+      sugBtn.addEventListener("click", () => {
+        void this.sendMessage(QUICK_ACTIONS[3].prompt);
+      });
     }
   }
 
@@ -468,20 +456,22 @@ class AIAssistantView extends ItemView {
         cls: "ai-action-btn",
         text: "插入末尾",
       });
-      insertBtn.addEventListener("click", () => this.appendToNote(msg.content));
+      insertBtn.addEventListener("click", () => { void this.appendToNote(msg.content); });
 
       const overwriteBtn = actions.createEl("button", {
         cls: "ai-action-btn ai-action-btn--danger",
         text: "覆写全文",
         attr: { title: "用 AI 回复替换整篇笔记内容（不可撤销）" },
       });
-      overwriteBtn.addEventListener("click", () => this.overwriteNote(msg.content));
+      overwriteBtn.addEventListener("click", () => { void this.overwriteNote(msg.content); });
 
       const copyBtn = actions.createEl("button", { cls: "ai-action-btn", text: "复制" });
-      copyBtn.addEventListener("click", async () => {
-        await navigator.clipboard.writeText(msg.content);
-        copyBtn.setText("已复制");
-        setTimeout(() => copyBtn.setText("复制"), 1500);
+      copyBtn.addEventListener("click", () => {
+        void (async () => {
+          await navigator.clipboard.writeText(msg.content);
+          copyBtn.setText("已复制");
+          window.setTimeout(() => copyBtn.setText("复制"), 1500);
+        })();
       });
 
       actions.createEl("button", {
@@ -489,7 +479,7 @@ class AIAssistantView extends ItemView {
         text: "重试",
       }).addEventListener("click", () => {
         const lastUser = [...this.messages].reverse().find((m) => m.role === "user");
-        if (lastUser) this.sendMessage(lastUser.content, true);
+        if (lastUser) void this.sendMessage(lastUser.content, true);
       });
     }
 
@@ -507,7 +497,7 @@ class AIAssistantView extends ItemView {
     if (!trimmed) return;
 
     if (!this.plugin.settings.apiKey) {
-      new Notice("请先在插件设置中填写 API Key");
+      new Notice("请先在插件设置中填写 API key");
       return;
     }
 
@@ -536,7 +526,7 @@ class AIAssistantView extends ItemView {
 
     // Thinking bubble
     const thinkingMsg: Message = { role: "assistant", content: "__thinking__" };
-    const { bubble: thinkBubble, wrap: thinkWrap } = this.renderBubble(thinkingMsg, true);
+    const { wrap: thinkWrap } = this.renderBubble(thinkingMsg, true);
 
     // Use selected text as context if available, otherwise whole note
     const context = this.selectedText
@@ -614,12 +604,14 @@ class AIAssistantView extends ItemView {
     new ConfirmModal(
       this.app,
       "覆写整篇笔记？",
-      `这将用 AI 回复替换「${file.basename}」的全部内容。Obsidian 的文件历史仍可恢复。`,
+      `这将用 AI 回复替换「${file.basename}」的全部内容。文件历史仍可恢复。`,
       "确认覆写",
-      async () => {
-        await this.app.vault.modify(file, content);
-        this.noteContext = content;
-        new Notice("✅ 笔记已覆写");
+      () => {
+        void (async () => {
+          await this.app.vault.modify(file, content);
+          this.noteContext = content;
+          new Notice("✅ 笔记已覆写");
+        })();
       }
     ).open();
   }
@@ -646,6 +638,7 @@ class AIAssistantSettingTab extends PluginSettingTab {
         d
           .addOption("anthropic", "Anthropic (Claude)")
           .addOption("openai", "OpenAI (GPT)")
+          // eslint-disable-next-line obsidianmd/ui/sentence-case -- "MiniMax" is the official brand capitalization
           .addOption("minimax", "MiniMax (海螺 AI)")
           .addOption("kimi", "Kimi (月之暗面)")
           .setValue(this.plugin.settings.apiProvider)
@@ -664,18 +657,19 @@ class AIAssistantSettingTab extends PluginSettingTab {
       );
 
     new Setting(containerEl)
-      .setName("API Key")
+      .setName("API key")
       .setDesc(
         this.plugin.settings.apiProvider === "anthropic"
-          ? "Anthropic API Key（以 sk-ant- 开头）"
+          ? "Anthropic API key（以 sk-ant- 开头）"
           : this.plugin.settings.apiProvider === "minimax"
-          ? "MiniMax API Key（在 minimax.chat 平台获取）"
+          ? "MiniMax API key（在 minimax.chat 平台获取）"
           : this.plugin.settings.apiProvider === "kimi"
-          ? "Kimi API Key（在 platform.moonshot.cn 获取）"
-          : "OpenAI API Key（以 sk- 开头）"
+          ? "Kimi API key（在 platform.moonshot.cn 获取）"
+          : "OpenAI API key（以 sk- 开头）"
       )
       .addText((t) =>
         t
+          // eslint-disable-next-line obsidianmd/ui/sentence-case -- "sk-" is the actual API key prefix used by Anthropic/OpenAI/Kimi
           .setPlaceholder("sk-...")
           .setValue(this.plugin.settings.apiKey)
           .onChange(async (v) => {
@@ -711,7 +705,7 @@ class AIAssistantSettingTab extends PluginSettingTab {
     // ── Test button ──────────────────────────────────────────────────────────
     const testSetting = new Setting(containerEl)
       .setName("测试配置")
-      .setDesc("发送一条测试消息，验证 API Key 和模型是否配置正确");
+      .setDesc("发送一条测试消息，验证 API key 和模型是否配置正确");
 
     const resultEl = containerEl.createDiv({ cls: "ai-test-result" });
 
@@ -721,7 +715,7 @@ class AIAssistantSettingTab extends PluginSettingTab {
         .setCta()
         .onClick(async () => {
           if (!this.plugin.settings.apiKey) {
-            resultEl.setText("❌ 请先填写 API Key");
+            resultEl.setText("❌ 请先填写 API key");
             resultEl.className = "ai-test-result ai-test-fail";
             return;
           }
@@ -764,15 +758,11 @@ export default class AIAssistantPlugin extends Plugin {
     // Command palette
     this.addCommand({
       id: "open-panel",
-      name: "打开 Lumen 面板",
+      name: "打开面板",
       callback: () => this.activateView(),
     });
 
     this.addSettingTab(new AIAssistantSettingTab(this.app, this));
-  }
-
-  onunload() {
-    this.app.workspace.detachLeavesOfType(VIEW_TYPE);
   }
 
   async activateView() {
@@ -782,11 +772,12 @@ export default class AIAssistantPlugin extends Plugin {
       leaf = workspace.getRightLeaf(false) ?? workspace.getLeaf(true);
       await leaf.setViewState({ type: VIEW_TYPE, active: true });
     }
-    workspace.revealLeaf(leaf);
+    await workspace.revealLeaf(leaf);
   }
 
   async loadSettings() {
-    this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+    const data = (await this.loadData()) as Partial<AIAssistantSettings> | null;
+    this.settings = { ...DEFAULT_SETTINGS, ...(data ?? {}) };
   }
 
   async saveSettings() {
