@@ -1,6 +1,6 @@
 {
   "name": "lumen-ai-assistant",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Lumen — AI assistant for Obsidian",
   "main": "main.js",
   "scripts": {

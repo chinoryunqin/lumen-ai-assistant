@@ -1,9 +1,9 @@
 {
   "id": "lumen-ai-assistant",
   "name": "Lumen",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "minAppVersion": "1.4.0",
-  "description": "为 Obsidian 笔记点亮 AI 之光。支持 Claude、GPT、MiniMax、Kimi，提供总结、翻译、深度剖析、提取待办、续写、润色等快捷操作，并可直接将结果写回笔记。",
+  "description": "Notion AI-style assistant for your notes. Summarize, translate, analyze, extract tasks, continue writing, and polish — then apply the result directly to your file. Supports Claude, GPT, MiniMax, and Kimi.",
   "author": "rick",
   "authorUrl": "",
   "isDesktopOnly": false
