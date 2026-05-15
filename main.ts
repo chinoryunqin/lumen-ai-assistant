@@ -638,8 +638,7 @@ class AIAssistantSettingTab extends PluginSettingTab {
         d
           .addOption("anthropic", "Anthropic (Claude)")
           .addOption("openai", "OpenAI (GPT)")
-          // eslint-disable-next-line obsidianmd/ui/sentence-case -- "MiniMax" is the official brand capitalization
-          .addOption("minimax", "MiniMax (海螺 AI)")
+          .addOption("minimax", "Minimax (海螺 AI)")
           .addOption("kimi", "Kimi (月之暗面)")
           .setValue(this.plugin.settings.apiProvider)
           .onChange(async (v) => {
@@ -669,8 +668,7 @@ class AIAssistantSettingTab extends PluginSettingTab {
       )
       .addText((t) =>
         t
-          // eslint-disable-next-line obsidianmd/ui/sentence-case -- "sk-" is the actual API key prefix used by Anthropic/OpenAI/Kimi
-          .setPlaceholder("sk-...")
+          .setPlaceholder("Paste your API key")
           .setValue(this.plugin.settings.apiKey)
           .onChange(async (v) => {
             this.plugin.settings.apiKey = v;

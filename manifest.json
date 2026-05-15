@@ -1,9 +1,9 @@
 {
   "id": "lumen-ai-assistant",
   "name": "Lumen",
-  "version": "1.0.2",
-  "minAppVersion": "1.4.0",
-  "description": "AI assistant for your notes. Summarize, translate, analyze, extract tasks, polish, and write the result back to your file. Supports Claude, GPT, MiniMax, and Kimi.",
+  "version": "1.0.3",
+  "minAppVersion": "1.7.2",
+  "description": "AI assistant for your notes. Summarize, translate, analyze, extract tasks, polish, and write the result back to your file. Supports Claude, GPT, Minimax, and Kimi.",
   "author": "rick",
   "authorUrl": "",
   "isDesktopOnly": false

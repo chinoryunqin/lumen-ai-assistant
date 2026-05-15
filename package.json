@@ -1,16 +1,16 @@
 {
   "name": "lumen-ai-assistant",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Lumen — AI assistant for Obsidian",
   "main": "main.js",
   "scripts": {
     "dev": "node esbuild.config.mjs",
-    "build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production"
+    "build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
+    "lint": "eslint main.ts"
   },
   "devDependencies": {
     "@types/node": "^16.11.6",
     "@typescript-eslint/parser": "^8.59.3",
-    "builtin-modules": "^3.3.0",
     "esbuild": "0.17.3",
     "eslint": "^9.39.4",
     "eslint-plugin-obsidianmd": "^0.3.0",
